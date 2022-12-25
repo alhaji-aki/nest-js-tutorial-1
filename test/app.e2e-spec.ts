@@ -1,7 +1,10 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import * as pactum from 'pactum';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { AuthDto } from '../src/auth/dto';
+import { UserDto } from '../src/user/dto';
 
 describe('App e2e', () => {
   let app: INestApplication;
@@ -9,18 +12,19 @@ describe('App e2e', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule]
+      imports: [AppModule],
     }).compile();
 
     app = moduleRef.createNestApplication();
 
-    app.useGlobalPipes(new ValidationPipe({
-      whitelist: true
-    }));
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
 
     await app.init();
 
+    await app.listen(3333);
     prisma = app.get(PrismaService);
+
+    pactum.request.setBaseUrl('http://localhost:3333');
   });
 
   afterAll(async () => {
@@ -29,21 +33,141 @@ describe('App e2e', () => {
   });
 
   describe('Auth', () => {
-    describe('Signup', () => {
-      it.todo('should sign up');
-    });
-    
-    describe('Signin', () => {
-      it.todo('should sign in');
-    });
-  });
-  
-  describe('User', () => {
-    describe('Get me', () => {});
+    const dto: AuthDto = {
+      email: 'someone@somewhere.com',
+      password: 'password',
+    };
 
-    describe('Edit User', () => {});
+    describe('Signup', () => {
+      it('show throw exception if email empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody({ password: dto.password })
+          .expectStatus(400);
+      });
+
+      it('show throw exception if password empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody({ email: dto.email })
+          .expectStatus(400);
+      });
+
+      it('show throw exception if no body provided', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody({})
+          .expectStatus(400);
+      });
+
+      it('should sign up', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody(dto)
+          .expectStatus(201);
+      });
+    });
+
+    describe('Signin', () => {
+      it('show throw exception if email empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody({ password: dto.password })
+          .expectStatus(400);
+      });
+
+      it('show throw exception if password empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody({ email: dto.email })
+          .expectStatus(400);
+      });
+
+      it('show throw exception if no body provided', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody({})
+          .expectStatus(400);
+      });
+
+      it('should sign in', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody(dto)
+          .expectStatus(200)
+          .stores('userAccessToken', 'access_token');
+      });
+    });
   });
-  
+
+  describe('User', () => {
+    describe('Get me', () => {
+      it('should throw error if wrong token is passed', () => {
+        return pactum
+          .spec()
+          .get('/users/me')
+          .withHeaders({
+            Authorization: 'Bearer wrong',
+          })
+          .expectStatus(401);
+      });
+
+      it('should throw error if no token is passed', () => {
+        return pactum.spec().get('/users/me').expectStatus(401);
+      });
+
+      it('should get current user', () => {
+        return pactum
+          .spec()
+          .get('/users/me')
+          .withHeaders({
+            Authorization: 'Bearer $S{userAccessToken}',
+          })
+          .expectStatus(200);
+      });
+    });
+
+    describe('Edit User', () => {
+      const dto: UserDto = {
+        firstName: 'Someone',
+        lastName: 'Somewhere',
+      };
+
+      it('should throw error if no token is passed', () => {
+        return pactum.spec().patch('/users/me').expectStatus(401);
+      });
+
+      it('should throw error if wrong token is passed', () => {
+        return pactum
+          .spec()
+          .patch('/users/me')
+          .withHeaders({ Authorization: 'Bearer wrong' })
+          .expectStatus(401);
+      });
+
+      it('should edit current user', () => {
+        return pactum
+          .spec()
+          .patch('/users/me')
+          .withHeaders({
+            Authorization: 'Bearer $S{userAccessToken}',
+          })
+          .withBody(dto)
+          .expectStatus(200)
+          .expectBodyContains(dto.firstName)
+          .expectBodyContains(dto.lastName);
+      });
+    });
+  });
+
   describe('Bookmark', () => {
     describe('Create Bookmarks', () => {});
 
@@ -52,7 +176,7 @@ describe('App e2e', () => {
     describe('Get Bookmark by id', () => {});
 
     describe('Edit Bookmarks', () => {});
-    
+
     describe('Delete Bookmarks', () => {});
   });
 });
