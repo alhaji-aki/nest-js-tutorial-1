@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AuthDto } from '../src/auth/dto';
 import { UserDto } from '../src/user/dto';
+import { CreateBookmarkDto, UpdateBookmarkDto } from 'src/bookmark/dto';
 
 describe('App e2e', () => {
   let app: INestApplication;
@@ -169,14 +170,119 @@ describe('App e2e', () => {
   });
 
   describe('Bookmark', () => {
-    describe('Create Bookmarks', () => {});
+    describe('Get Empty Bookmarks', () => {
+      it('should return empty body', () => {
+        return pactum
+          .spec()
+          .get('/bookmarks')
+          .withHeaders({
+            Authorization: 'Bearer $S{userAccessToken}',
+          })
+          .expectStatus(200)
+          .expectBody([]);
+      });
+    });
 
-    describe('Get Bookmarks', () => {});
+    describe('Create Bookmarks', () => {
+      const dto: CreateBookmarkDto = {
+        title: 'My own bookmark',
+        description: 'this is fun',
+        link: 'https://google.com',
+      };
 
-    describe('Get Bookmark by id', () => {});
+      it('should throw error if invalid token is passed', () => {
+        return pactum
+          .spec()
+          .post('/bookmarks')
+          .withHeaders({ Authorization: 'Bearer wrong' })
+          .expectStatus(401);
+      });
 
-    describe('Edit Bookmarks', () => {});
+      it('should throw error if invalid data is passed', () => {
+        return pactum
+          .spec()
+          .post('/bookmarks')
+          .withHeaders({ Authorization: 'Bearer $S{userAccessToken}' })
+          .expectStatus(400);
+      });
 
-    describe('Delete Bookmarks', () => {});
+      it('should create a bookmark', () => {
+        return pactum
+          .spec()
+          .post('/bookmarks')
+          .withHeaders({ Authorization: 'Bearer $S{userAccessToken}' })
+          .withBody(dto)
+          .expectStatus(201)
+          .expectBodyContains(dto.title)
+          .expectBodyContains(dto.description)
+          .expectBodyContains(dto.link)
+          .stores('bookmarkId', 'id');
+      });
+    });
+
+    describe('Get Bookmarks', () => {
+      it('should get bookmarks', () => {
+        return pactum
+          .spec()
+          .get('/bookmarks')
+          .withHeaders({
+            Authorization: 'Bearer $S{userAccessToken}',
+          })
+          .expectStatus(200)
+          .expectJsonLength(1);
+      });
+    });
+
+    describe('Get Bookmark by id', () => {
+      it('should get bookmarks', () => {
+        return pactum
+          .spec()
+          .get('/bookmarks/{id}')
+          .withPathParams('id', '$S{bookmarkId}')
+          .withHeaders({ Authorization: 'Bearer $S{userAccessToken}' })
+          .expectStatus(200)
+          .expectBodyContains('$S{bookmarkId}');
+      });
+    });
+
+    describe('Edit Bookmarks', () => {
+      const dto: UpdateBookmarkDto = {
+        title: 'My updated bookmark',
+        description: 'updating my bookmark',
+      };
+
+      it('should update bookmarks', () => {
+        return pactum
+          .spec()
+          .patch('/bookmarks/{id}')
+          .withPathParams('id', '$S{bookmarkId}')
+          .withHeaders({ Authorization: 'Bearer $S{userAccessToken}' })
+          .withBody(dto)
+          .expectStatus(200)
+          .expectBodyContains('$S{bookmarkId}')
+          .expectBodyContains(dto.description)
+          .expectBodyContains(dto.title);
+      });
+    });
+
+    describe('Delete Bookmarks', () => {
+      it('should delete bookmarks', () => {
+        return pactum
+          .spec()
+          .delete('/bookmarks/{id}')
+          .withPathParams('id', '$S{bookmarkId}')
+          .withHeaders({ Authorization: 'Bearer $S{userAccessToken}' })
+          .expectStatus(204);
+      });
+
+      it('should return empty body', () => {
+        return pactum
+          .spec()
+          .get('/bookmarks')
+          .withHeaders({ Authorization: 'Bearer $S{userAccessToken}' })
+          .expectStatus(200)
+          .expectJsonLength(0);
+      });
+    });
   });
 });
